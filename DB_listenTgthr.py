@@ -71,6 +71,31 @@ class DB:
     # ------------
     # ------------
 
+    def give_mac_of_shares(self, song):
+        """
+        :return: macs of all sharing people
+        """
+        if self._song_exist:
+            all_shares = f"SELECT mac_addr FROM share_tbl WHERE song_name = '{song}'"
+            self.cur.execute(all_shares)
+
+            list_of_shares = self.cur.fetchall()
+            return list_of_shares
+
+    # ------------
+    # ------------
+
+    def get_mac_of_user(self, username):
+        # first check if user exists:
+        if self._check_exists(username):
+            mac_of_user = f"SELECT mac_addr FROM users_tbl WHERE username = '{username}'"
+            self.cur.execute(mac_of_user)
+            mac = self.cur.fetchall()
+            return mac
+
+    # ------------
+    # ------------
+
     def _check_like_exist(self, song_name, username):
         """
         :return: check if the client liked the song or not
@@ -92,13 +117,18 @@ class DB:
         """
         :return: Store new client's data in the database
         """
-        # todo: create username exists for checkup
+        # print(password)
+        flag = False
         if self._check_exists(username):
-            print("sorry, username already taken!")
+            # print("sorry, username already taken!")
+            pass
         else:
-            sql_table = f"INSERT INTO users_tbl VALUES('{username}', '{mac_addr}', '{password}')"
+            flag = True
+            sql_table = f"INSERT INTO users_tbl VALUES('{username}','{mac_addr}','{password}')"
             self.cur.execute(sql_table)
             self.conn.commit()
+
+        return flag
 
     # ------------
     # ------------
@@ -111,9 +141,48 @@ class DB:
         # delete user from all tables:
 
         if self._check_exists(username):
-            del_user = f"DELETE from users_tbl WHERE username = '{username}'"
+            # get user's mac address - to delete from other tables
+            mac_addr = f"SELECT mac_addr FROM users_tbl WHERE username = '{username}'"
+            self.cur.execute(mac_addr)
+
+            mac_addr = self.cur.fetchall()  # break list that has one val
+            mac_addr = mac_addr[0][0]  # get mac from tuple & list
+
+            # before deleting song share, collect all songs shared from the user -
+            # if after deleting cant find the song in share table - user was the only sharer
+            # MUST DELETE SONG THEN.
+
+            # todo - should delete song share?
+            songs_shared = f"SELECT song_name FROM share_tbl WHERE mac_addr = '{mac_addr}'"
+            self.cur.execute(songs_shared)
+            songs_shared = self.cur.fetchall()
+
+            # delete all songs shared by user:
+            del_user = f"DELETE from share_tbl WHERE mac_addr = '{mac_addr}'"
             self.cur.execute(del_user)
             self.conn.commit()
+
+            # now check if any other shares of the same songs:
+            all_data = f"SELECT * FROM share_tbl"
+            self.cur.execute(all_data)
+            all_data = self.cur.fetchall()
+
+            song_list = []  # to put songs in
+            songs_to_del = []  # all songs that are shared only by deleted user
+
+            for index, song in enumerate(all_data):
+                song_list.append(song[0])  # add all songs in song list
+
+            for index, song in enumerate(songs_shared):
+                # for every deleted song, if no longer in song_tbl - del
+                if song[0] not in song_list:
+                    songs_to_del.append(song[0])
+
+            # delete all songs that have been shared by this user only:
+            for song in songs_to_del:  # for every deleted song
+                del_song = f"DELETE from songs_tbl WHERE song_name = '{song}'"
+                self.cur.execute(del_song)
+                self.conn.commit()
 
     # ------------
     # ------------
@@ -150,6 +219,8 @@ class DB:
             self.cur.execute(insert_song)
             self.conn.commit()
 
+        # todo - is it ok to write it this way?
+        return True
     # ------------
     # ------------
 
@@ -194,12 +265,13 @@ class DB:
         flag = False
         # check fisrt username then password
         if self._check_exists(username):
-
-            right_password = f"SELECT username FROM users_tbl WHERE username = '{username}' AND password = '{hushed_password}' "
+            right_password = f"SELECT * FROM users_tbl WHERE username = '{username}' AND password = '{hushed_password}'"
             self.cur.execute(right_password)
 
-            # does like exist?
-            if len(self.cur.fetchall()) == 1:
+            # does user exist?
+            how_many_got = len(self.cur.fetchall())
+            # print("checking how many matches to - ", username, hushed_password, " -> ", how_many_got)
+            if how_many_got == 1:
                 flag = True
 
         return flag
@@ -207,7 +279,7 @@ class DB:
     # ------------
     # ------------
 
-    def add_like(self, song_name, username):
+    def add_like_or_rem(self, song_name, username):
         """
         :return: add like to the song
         """
@@ -221,6 +293,12 @@ class DB:
             self.cur.execute(like_exists)
             self.conn.commit()
 
+        # if it does - remove it
+        else:
+           self.remove_like(song_name, username)
+
+        # todo - is that ok? needed?
+        return True
     # ------------
     # ------------
 
@@ -238,39 +316,53 @@ class DB:
             self.cur.execute(del_like)
             self.conn.commit()
 
-    # ----------
 
+    def close_db(self):
+        self.cur.close()
+        self.conn.close()
+
+    # ----------
 
 def main():
     db = DB("data_try")
 
     # ------- user data checks -------
 
-    # enter a new user
-    db.enter_client("reut", "reuts mac", "password")
+    # # enter a new user
+    db.enter_client("reut2", "reuts mac", "password")
 
     # check if user exists
-    print("DOES USER CALLED REUT EXIST?", db._check_exists("reut"))
-    print("DOES USER CALLED moshik EXIST?", db._check_exists("moshik"))
+    # print("DOES USER CALLED REUT EXIST?", db._check_exists("reut2"))
+    # print("DOES USER CALLED moshik EXIST?", db._check_exists("moshik"))
 
     # try entering the same user again:
-    db.enter_client("reut", "reuts mac", "password")
-    print("verified login of reut?", db.verify_login("reut", "password"))
+    db.enter_client("reut2", "reuts mac11", "password")
+    # print("verified login of reut?", db.verify_login("reut2", "password"))
+
 
     # ------- song data checks ---------
 
     # add song :
-    db.add_song("shades_of", "lana", "reuts mac")
-    # check if song exist
-    print(db._song_exist("shades_of", "lana"))
-    # add like
-    db.add_like("reut", "shades_of")
-    print(db._check_like_exist("reut", "shades_of"))
-    db.remove_like("reut", "shades_of")
-    print(db._check_like_exist("reut", "shades_of"))
-
-    # ------ modifying check ------
-    db.check_last_modified()
+    # db.add_song("shades_of", "lana", "reuts mac")
+    db.add_song("shades_of", "lana", "guys mac")
+    db.add_song("some_song", "artist", "guys mac")
+    db.add_song("some_song", "gwen", "reuts mac11")
+    #
+    # db.add_song("toxic", "Britney", "reuts mac")
+    # sharer = db.give_mac_of_shares("some_song")
+    # print(sharer)
+    # db.remove_client("reut")
+    #
+    # # check if song exist
+    # print(db._song_exist("shades_of", "lana"))
+    # # add like
+    # db.add_like("guy", "shades_of")
+    # print(db._check_like_exist("guy", "shades_of"))
+    # db.remove_like("guy", "shades_of")
+    # print(db._check_like_exist("reut", "shades_of"))
+    #
+    # # ------ modifying check ------
+    # db.check_last_modified()
 
 
 if __name__ == '__main__':
