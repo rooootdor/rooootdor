@@ -11,8 +11,8 @@ def pack_signUp(username, password, mac):
     return f"00,{username},{password},{mac}"
 
 
-def pack_login(user_name, hushed_password, mac):
-    return f"01,{user_name},{hushed_password},{mac}"
+def pack_login(user_name, password, mac):
+    return f"01,{user_name},{password},{mac}"
 
 
 def pack_uploadSong(song_name, artist_name, username):
@@ -41,7 +41,7 @@ def pack_dynamic_update(update, song_name, artist):
     return f"06,{update},{song_name},{artist}"
 
 
-def pack_exit_prog():
-    return "99"
+def pack_exit_prog(username):
+    return f"99,{username}"
 
 

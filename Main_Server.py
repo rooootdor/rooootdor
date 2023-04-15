@@ -14,7 +14,6 @@ def register(params, DB):
     """
     :return: return packed msg with status of could\n't register to system
     """
-
     username = params[0]
     password = params[1]
     mac_addr = params[2]
@@ -29,20 +28,17 @@ def login(params, DB):
     """
     :return: return packed msg with status of could\n't login to system
     """
-
     username = params[0]
     password = params[1]
     mac = params[2]
     ip = params[3]
+    print("all params - ", mac, username, password, ip)
 
     # check if can get logged in:
     can_log_in = DB.verify_login(username, password)
 
-
-
     # if can login -
     # 1) want to get MAC to put in mac -> ip dict (for p2p connection)
-    print("mac - ", mac)
     server_comm.ip_of_mac[mac] = ip
     return protocol_server.pack_login(can_log_in)
 
@@ -80,8 +76,6 @@ def upload_song(params, DB):
     artist_name = params[1]
     username = params[2]
     mac_addr = DB.get_mac_of_user(username)[0][0]
-
-
     # can the song be uploaded?
     song_added = DB.add_song(song_name, artist_name, mac_addr)
 
@@ -94,10 +88,25 @@ def add_remove_like(params,DB):
     """
     song_name = params[0]
     user_name = params[1]
-
     could_add_rem = DB.add_like_or_rem(song_name, user_name)
-
     return protocol_server.pack_addOrRem_like(could_add_rem)
+
+
+def get_all_playlist(self):
+    all_songs = f"SELECT * FROM songs_tbl"
+    self.cur.execute(all_songs)
+    all_songs = self.cur.fetchall()
+    print(all_songs)
+    song_artist_likes = []
+
+    # now get likes of each song:
+    for index, tup in enumerate(all_songs):
+        song = tup[0]
+        artist = tup[1]
+        num_of_likes = self.get_num_likes(song)
+        song_artist_likes.append([song, artist, num_of_likes])
+
+    return song_artist_likes
 
 
 def receive_song_updates(params, DB):
@@ -114,37 +123,34 @@ def receive_song_updates(params, DB):
     # get mac of user:
     mac_of_user = server_comm.ip_of_mac[ip_of_user]
 
-
     if event == "00":
         # song added  - new sharer of EXISTING song:
         # add to sharing table (user, mac)
-
         DB.add_song(song_name,artist,mac_of_user)
-
 
     elif event == "01": # song deleted
         # delete share song from user:
         # todo - figure out - do we take into consideration deletion?
         pass
 
-    return protocol_server.pack_dynamic_update("00")
+    # send all clients new playlist:
+    all_songs = DB.get_all_playlist()  # return new playlist
+    return protocol_server.pack_updated_playlst(all_songs)  # send clients the change
 
 
-def handle_exit(username,DB):
+def handle_exit(params, DB):
     """
     :return: delete user from all tables in db.
     """
-
+    username, ip = params
     DB.remove_client(username)
-
-    return protocol_server.pack_exit_prog()
+    return "client disconnected"
 
 
 def handle_income_msgs(msg_q, comm):
     """
     :return:
     """
-
     DB = DB_listenTgthr.DB("DB_listenTgthr")
 
     while True:
@@ -161,7 +167,10 @@ def handle_income_msgs(msg_q, comm):
 
         if op_code in op_codes.keys():
             msg = op_codes[op_code](data,DB)
-            comm.send_one(msg, ip)
+
+            # if not disconnected:
+            if msg is not "client disconnected":
+                comm.send_one(msg, ip)
 
 
 op_codes = {"00": register,

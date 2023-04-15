@@ -109,6 +109,14 @@ class ServerComm:
                 print("ServerComm - send_all", str(e))
                 self._disconnect_client(soc)
 
+    def send_all(self, data):
+        """
+        :param data: data wanted to send
+        :return: send data to all connected clients
+        """
+        for client in self.open_clients.keys():
+            self.send_one(data, self._find_ip_by_socket(client))
+
     def _disconnect_client(self, socket):
         """
         disconnect client

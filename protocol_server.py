@@ -48,6 +48,11 @@ def pack_dynamic_update(update_status):
     return f"06,{update_status}"
 
 
+# send new updated playlist
+def pack_updated_playlst(playlist):
+    return f"07,{playlist}"
+
+
 def pack_exit_prog():
     return {2, "99"}
 
